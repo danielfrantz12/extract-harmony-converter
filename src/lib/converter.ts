@@ -58,12 +58,10 @@ export const convertBankStatement = async (
 export const getSupportedBanks = (): string[] => {
   // Na implementação real, isso viria do seu código Python
   return [
-    "Banco do Brasil",
-    "Itaú",
-    "Bradesco",
-    "Santander",
-    "Caixa Econômica",
-    "Nubank",
-    "C6"
+    "C6",
+    "Itau",
+    "XP",
+    "Avenue",
+    "Clear"
   ];
 };
