@@ -1,12 +1,11 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import FileUploader from "@/components/FileUploader";
 import ConverterInfo from "@/components/ConverterInfo";
 import ProcessingIndicator from "@/components/ProcessingIndicator";
-import { convertBankStatement, getSupportedBanks } from "@/lib/converter";
-import { Download } from "lucide-react";
+import { convertBankStatement, getSupportedBanks, approveSuggestions } from "@/lib/converter";
+import { Download, Check } from "lucide-react";
 import { 
   Select,
   SelectContent,
@@ -20,14 +19,16 @@ import { Label } from "@/components/ui/label";
 const Index = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [convertedFile, setConvertedFile] = useState<Blob | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{ texto: string; sugestao: string; tipo: string }>>([]);
+  const [outputFile, setOutputFile] = useState<string | null>(null);
   const [selectedBank, setSelectedBank] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const { toast } = useToast();
 
   const handleFileSelected = (file: File) => {
     setSelectedFile(file);
-    setConvertedFile(null);
+    setSuggestions([]);
+    setOutputFile(null);
   };
 
   const handleConvert = async () => {
@@ -64,7 +65,8 @@ const Index = () => {
       const result = await convertBankStatement(selectedFile, selectedBank, password);
       
       if (result.success && result.data) {
-        setConvertedFile(result.data);
+        setSuggestions(result.data.suggestions);
+        setOutputFile(result.data.outputFile);
         toast({
           title: "Conversão concluída",
           description: "Seu extrato foi convertido com sucesso!"
@@ -89,22 +91,41 @@ const Index = () => {
   };
 
   const handleDownload = () => {
-    if (!convertedFile) return;
+    if (!outputFile) return;
     
     const downloadLink = document.createElement("a");
-    const url = URL.createObjectURL(convertedFile);
-    
-    downloadLink.href = url;
-    downloadLink.download = `${selectedFile?.name.split('.')[0]}_convertido.xlsx`;
+    downloadLink.href = `/uploads/${outputFile}`;
+    downloadLink.download = outputFile;
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
     
     toast({
       title: "Download iniciado",
       description: "Seu arquivo convertido está sendo baixado"
     });
+  };
+
+  const handleApprove = async () => {
+    if (!suggestions.length) return;
+
+    setIsProcessing(true);
+    try {
+      await approveSuggestions(suggestions);
+      toast({
+        title: "Sugestões aprovadas",
+        description: "As categorias foram salvas com sucesso!"
+      });
+      setSuggestions([]);
+    } catch (error) {
+      toast({
+        title: "Erro ao aprovar",
+        description: "Ocorreu um erro ao salvar as categorias",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const supportedBanks = getSupportedBanks();
@@ -117,7 +138,7 @@ const Index = () => {
             Conversor de Extratos Bancários
           </h1>
           <p className="text-gray-600">
-            Converta extratos bancários para o seu formato personalizado
+            Converta extratos bancários e categorize transações automaticamente
           </p>
         </header>
         
@@ -165,16 +186,29 @@ const Index = () => {
               />
             </div>
             
-            <div className="flex justify-center">
-              {convertedFile ? (
+            <div className="flex justify-center gap-4">
+              {outputFile && (
                 <Button 
                   onClick={handleDownload}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Baixar Arquivo Convertido
+                  Baixar Arquivo
                 </Button>
-              ) : (
+              )}
+              
+              {suggestions.length > 0 && (
+                <Button 
+                  onClick={handleApprove}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={isProcessing}
+                >
+                  <Check className="mr-2 h-4 w-4" />
+                  Aprovar Categorias
+                </Button>
+              )}
+              
+              {!outputFile && !suggestions.length && (
                 <Button 
                   onClick={handleConvert}
                   disabled={!selectedFile || isProcessing || !selectedBank}
@@ -185,11 +219,32 @@ const Index = () => {
               )}
             </div>
             
-            {(isProcessing || convertedFile) && selectedFile && (
+            {(isProcessing || suggestions.length > 0) && selectedFile && (
               <ProcessingIndicator 
                 isProcessing={isProcessing}
                 fileName={selectedFile.name}
               />
+            )}
+
+            {suggestions.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold mb-4">Sugestões de Categorias</h3>
+                <div className="space-y-2">
+                  {suggestions.map((suggestion, index) => (
+                    <div key={index} className="p-3 bg-white rounded-lg shadow-sm">
+                      <p className="font-medium">{suggestion.texto}</p>
+                      <p className="text-sm text-gray-600">
+                        Categoria: <span className="font-medium">{suggestion.sugestao}</span>
+                        {suggestion.tipo && (
+                          <span className="ml-2">
+                            ({suggestion.tipo === 'E' ? 'Entrada' : 'Saída'})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -1,67 +1,93 @@
-
 /**
- * Na implementação real, esta lógica seria substituída por uma chamada para um backend
- * que executaria seu código Python.
+ * Interfaces para tipagem das respostas da API
  */
-
 export interface ConversionResult {
   success: boolean;
-  data?: Blob;
+  data?: {
+    suggestions: Array<{
+      texto: string;
+      sugestao: string;
+      tipo: string;
+    }>;
+    outputFile: string;
+  };
   errorMessage?: string;
 }
 
-// Função para simular o processamento do arquivo
+// URL base da API - ajuste conforme necessário
+const API_BASE_URL = 'http://localhost:3000';
+
+// Função para converter o extrato bancário
 export const convertBankStatement = async (
   file: File, 
   bankName: string,
   password?: string
 ): Promise<ConversionResult> => {
-  // Aqui simulamos um tempo de processamento
-  return new Promise((resolve) => {
-    // Simulação de tempo de processamento (2-5 segundos)
-    const processingTime = 2000 + Math.random() * 3000;
-    
-    setTimeout(() => {
-      // Para fins de demonstração, consideramos todos os arquivos como conversíveis
-      // Na implementação real, seu código Python faria a conversão
-      
-      // Verificação especial para C6 Bank
-      if (bankName === "C6" && (!password || password.length < 4)) {
-        resolve({
-          success: false,
-          errorMessage: "Senha do C6 Bank inválida ou muito curta"
-        });
-        return;
+  try {
+    const formData = new FormData();
+    formData.append('statement', file);
+    formData.append('bank', bankName);
+    if (password) {
+      formData.append('password', password);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/convert-suggest`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        errorMessage: errorData.error || 'Erro ao processar o arquivo'
+      };
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      data: {
+        suggestions: data.suggestions,
+        outputFile: data.outputFile
       }
-      
-      if (Math.random() > 0.1) { // 90% de chance de sucesso
-        // Cria um arquivo XLSX de exemplo
-        const sampleContent = `This is a sample converted XLSX file from ${bankName}`;
-        const blob = new Blob([sampleContent], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-        
-        resolve({
-          success: true,
-          data: blob
-        });
-      } else {
-        // Simula um erro de conversão
-        resolve({
-          success: false,
-          errorMessage: `Não foi possível processar o formato do arquivo do banco ${bankName}. Verifique se é um extrato válido.`
-        });
-      }
-    }, processingTime);
-  });
+    };
+  } catch (error) {
+    console.error('Erro na conversão:', error);
+    return {
+      success: false,
+      errorMessage: 'Erro ao se comunicar com o servidor'
+    };
+  }
 };
 
-// Esta função seria substituída pela integração real com seu código Python
+// Função para aprovar sugestões
+export const approveSuggestions = async (suggestions: Array<{ texto: string; sugestao: string }>) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(suggestions)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Erro ao aprovar sugestões');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Erro ao aprovar sugestões:', error);
+    throw error;
+  }
+};
+
+// Lista de bancos suportados
 export const getSupportedBanks = (): string[] => {
-  // Na implementação real, isso viria do seu código Python
   return [
     "C6",
-    "Itau",
-    "XP",
-    "Avenue",
-    "Clear"
+    "XP"
   ];
 };
