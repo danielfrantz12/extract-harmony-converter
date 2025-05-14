@@ -7,11 +7,22 @@ import ConverterInfo from "@/components/ConverterInfo";
 import ProcessingIndicator from "@/components/ProcessingIndicator";
 import { convertBankStatement, getSupportedBanks } from "@/lib/converter";
 import { Download } from "lucide-react";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue 
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const Index = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [convertedFile, setConvertedFile] = useState<Blob | null>(null);
+  const [selectedBank, setSelectedBank] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const { toast } = useToast();
 
   const handleFileSelected = (file: File) => {
@@ -29,10 +40,28 @@ const Index = () => {
       return;
     }
 
+    if (!selectedBank) {
+      toast({
+        title: "Nenhum banco selecionado",
+        description: "Por favor, selecione o banco do extrato",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (selectedBank === "C6" && !password) {
+      toast({
+        title: "Senha não informada",
+        description: "Por favor, informe a senha para extratos do banco C6",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
-      const result = await convertBankStatement(selectedFile);
+      const result = await convertBankStatement(selectedFile, selectedBank, password);
       
       if (result.success && result.data) {
         setConvertedFile(result.data);
@@ -96,11 +125,45 @@ const Index = () => {
           <ConverterInfo supportedBanks={supportedBanks} />
           
           <div className="space-y-6">
-            <FileUploader 
-              onFileSelected={handleFileSelected}
-              acceptedTypes={['.xlsx', '.xls', '.csv', '.pdf']}
-              isProcessing={isProcessing}
-            />
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="bank-select">Selecione o Banco</Label>
+                <Select
+                  value={selectedBank}
+                  onValueChange={setSelectedBank}
+                >
+                  <SelectTrigger id="bank-select" className="w-full">
+                    <SelectValue placeholder="Selecione o banco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supportedBanks.map((bank) => (
+                      <SelectItem key={bank} value={bank}>
+                        {bank}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {selectedBank === "C6" && (
+                <div>
+                  <Label htmlFor="password">Senha (apenas para C6)</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Digite a senha para o extrato do C6"
+                  />
+                </div>
+              )}
+              
+              <FileUploader 
+                onFileSelected={handleFileSelected}
+                acceptedTypes={['.xlsx', '.xls', '.csv', '.pdf']}
+                isProcessing={isProcessing}
+              />
+            </div>
             
             <div className="flex justify-center">
               {convertedFile ? (
@@ -114,7 +177,7 @@ const Index = () => {
               ) : (
                 <Button 
                   onClick={handleConvert}
-                  disabled={!selectedFile || isProcessing}
+                  disabled={!selectedFile || isProcessing || !selectedBank}
                   className="bg-bank-dark hover:bg-bank-light"
                 >
                   Converter Extrato
